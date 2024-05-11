@@ -515,6 +515,8 @@ public:
 
   RC close();
 
+  RC drop();
+
 private:
   /**
    * 如果key的类型是CHARS, 扩展或缩减user_key的大小刚好是schema中定义的大小

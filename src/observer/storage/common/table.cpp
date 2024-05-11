@@ -120,6 +120,28 @@ RC Table::create(
   return rc;
 }
 
+RC Table::drop(const char *path)
+{
+  RC rc = RC::SUCCESS;
+  //remove index
+  for(Index *index : index_){
+    index->drop();
+  }
+  //destiory record handler
+  rc = record_handler_->destroy();
+  delete record_handler_;
+  record_handler_ = nullptr;
+
+
+  //destory buffer pool and remove data file
+  std::string data_file = table_data_file(base_dir, name);
+  BufferPoolManager &bpm = BufferPoolManager::instance();
+  rc = bpm.remove_file(data_file.c_str());
+
+  // remove meta file
+  int remove_ret = ::remove(path);
+  return rc;
+}
 RC Table::open(const char *meta_file, const char *base_dir, CLogManager *clog_manager)
 {
   // 加载元数据文件
