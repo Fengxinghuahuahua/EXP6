@@ -120,28 +120,53 @@ RC Table::create(
   return rc;
 }
 
-RC Table::drop(const char *path)
+RC Table::destroy(const char *dir)
 {
-  RC rc = RC::SUCCESS;
-  //remove index
-  for(Index *index : index_){
-    index->drop();
+    // flush the dirty pages
+  RC rc = sync();
+
+  if (rc != RC::SUCCESS) {
+    return rc;
   }
-  //destiory record handler
-  rc = record_handler_->destroy();
-  delete record_handler_;
-  record_handler_ = nullptr;
 
+  // remove table meta file( *.table )
+  std::string table_meta_path = table_meta_file(dir, name());
+  if (unlink(table_meta_path.c_str()) != 0) {
+    LOG_ERROR("Failed to remove meta file=%s, errno=%d", table_meta_path.c_str(), errno);
+    return RC::GENERIC_ERROR;
+  }
 
-  //destory buffer pool and remove data file
-  std::string data_file = table_data_file(base_dir, name);
-  BufferPoolManager &bpm = BufferPoolManager::instance();
-  rc = bpm.remove_file(data_file.c_str());
+  // remove table data file( *.data )
+  std::string table_data_path = table_data_file(dir, name());
+  if (unlink(table_data_path.c_str()) != 0) {
+    LOG_ERROR("Failed to remove data file=%s, errno=%d", table_data_path.c_str(), errno);
+    return RC::GENERIC_ERROR;
+  }
 
-  // remove meta file
-  int remove_ret = ::remove(path);
-  return rc;
+  // TODO: uncomment the following when finishing `text`
+
+  // remove text file
+  // std::string table_text_path = table_text_file(dir, name());
+  // if (unlink(table_text_path.c_str()) != 0) {
+  //   LOG_ERROR("Failed to remove text file=%s, errno=%d", table_text_path.c_str(), errno);
+  //   return RC::GENERIC_ERROR;
+  // }
+
+  // remove table index file( *.index )
+  const int index_num = table_meta_.index_num();
+  for (int i = 0; i < index_num; i++) {  // 清理所有的索引相关文件数据与索引元数据
+      ((BplusTreeIndex*)indexes_[i])->close();
+      const IndexMeta* index_meta = table_meta_.index(i);
+      std::string index_file = table_index_file(dir, name(), index_meta->name());
+      if(unlink(index_file.c_str()) != 0) {
+          LOG_ERROR("Failed to remove index file=%s, errno=%d", index_file.c_str(), errno);
+          return RC::GENERIC_ERROR;
+      }
+  }
+
+  return RC::SUCCESS;
 }
+
 RC Table::open(const char *meta_file, const char *base_dir, CLogManager *clog_manager)
 {
   // 加载元数据文件

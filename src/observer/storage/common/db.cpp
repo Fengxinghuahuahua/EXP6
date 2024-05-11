@@ -86,16 +86,20 @@ RC Db::create_table(const char *table_name, int attribute_count, const AttrInfo 
 
 RC Db::drop_table(const char *name)
 {
-  RC rc = RC::SUCCESS;
-  Table *table = find_table(name);
-  if (nullptr == table){
-    return RC::SCHEMA_TABLE_NOT_EXIST;
+  auto iter = opened_tables_.find(name);
+  if (iter == opened_tables_.end()) {
+    return SCHEMA_TABLE_NOT_EXIST;
   }
 
-  std::string table_file_path = table_meta_file(path_.c_str(), table_name);
-  rc = table->drop(table_file_path.c_str());
-  opened_tables_.erase(std::string(name));
-  return rc;
+  Table *table = iter->second;
+  RC rc = table->destroy(path_.c_str());
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+
+  opened_tables_.erase(iter);
+  delete table;
+  return RC::SUCCESS;
 }
 
 Table *Db::find_table(const char *table_name) const
