@@ -29,6 +29,9 @@ See the Mulan PSL v2 for more details. */
 #define EMPTY_RID_PAGE_NUM -1
 #define EMPTY_RID_SLOT_NUM -1
 
+// TODO: it seems that mysql's multiple index max column num is 16?
+#define MAX_COLUMN_NUM 16
+
 class AttrComparator
 {
 public:
@@ -44,8 +47,7 @@ public:
 
   int operator()(const char *v1, const char *v2) const {
     switch (attr_type_) {
-    case INTS: 
-    case DATES: {
+    case INTS: case DATES: {
       return compare_int((void *)v1, (void *)v2);
     }
       break;
@@ -69,28 +71,46 @@ private:
 class KeyComparator
 {
 public:
-  void init(AttrType type, int length)
+  void init(const std::vector<AttrType> &types, const std::vector<int> &length)
   {
-    attr_comparator_.init(type, length);
+    assert(types.size() == length.size());
+    attr_comparators_.resize(types.size());
+    for (int i = 0; i < types.size(); ++i) {
+      attr_comparators_[i].init(types[i], length[i]);
+    }
   }
 
-  const AttrComparator &attr_comparator() const {
-    return attr_comparator_;
+  const std::vector<AttrComparator> &attr_comparator() const {
+    return attr_comparators_;
   }
 
   int operator() (const char *v1, const char *v2) const {
-    int result = attr_comparator_(v1, v2);
+    // int result = attr_comparator_(v1, v2);
+    int result;
+    size_t offset = 0;
+    for (const AttrComparator &cmp: attr_comparators_) {
+      // check the fields from left to right until find two that don't equal
+      // TODO: maybe we should check the boundary?
+      result = cmp(v1 + offset, v2 + offset);
+      if (result != 0) {
+        return result;
+      } 
+      offset += cmp.attr_length();
+    }
     if (result != 0) {
       return result;
     }
-
-    const RID *rid1 = (const RID *)(v1 + attr_comparator_.attr_length());
-    const RID *rid2 = (const RID *)(v2 + attr_comparator_.attr_length());
+    const RID *rid1 = (const RID *)(v1 + offset);
+    const RID *rid2 = (const RID *)(v2 + offset);
     return RID::compare(rid1, rid2);
   }
 
 private:
-  AttrComparator attr_comparator_;
+  /**
+    used for multi index
+  */
+  std::vector<AttrComparator> attr_comparators_;
+  // AttrComparator attr_comparator_;
 };
 
 class AttrPrinter
@@ -108,7 +128,7 @@ public:
 
   std::string operator()(const char *v) const {
     switch (attr_type_) {
-    case INTS: {
+    case INTS: case DATES: {
       return std::to_string(*(int*)v);
     }
       break;
@@ -139,26 +159,40 @@ private:
 class KeyPrinter
 {
 public:
-  void init(AttrType type, int length)
+  void init(const std::vector<AttrType> &type, const std::vector<int> &length)
   {
-    attr_printer_.init(type, length);
+    assert(type.size() == length.size());
+    attr_printer_.resize(type.size());
+    for (int i = 0; i < type.size(); ++i) {
+      attr_printer_[i].init(type[i], length[i]);
+
+    }
+    // attr_printer_.init(type, length);
   }
 
-  const AttrPrinter &attr_printer() const {
+  const std::vector<AttrPrinter> &attr_printer() const {
     return attr_printer_;
   }
 
   std::string operator() (const char *v) const {
     std::stringstream ss;
-    ss << "{key:" << attr_printer_(v) << ",";
+    // ss << "{key:" << attr_printer_(v) << ",";
+    ss << "{key:{";
+    int offset = 0;
+    for (int i = 0; i < attr_printer_.size(); ++i) {
+      ss << attr_printer_[i](v + offset) << ",";
+      offset += attr_printer_[i].attr_length();
+    }
+    ss << "},";
 
-    const RID *rid = (const RID *)(v + attr_printer_.attr_length());
+    // const RID *rid = (const RID *)(v + attr_printer_.attr_length());
+    const RID *rid = (const RID *)(v + offset);
     ss << "rid:{" << rid->to_string() << "}}";
     return ss.str();
   }
 
 private:
-  AttrPrinter attr_printer_;
+  std::vector<AttrPrinter> attr_printer_;
 };
 
 /**
@@ -175,9 +209,12 @@ struct IndexFileHeader {
   PageNum  root_page;
   int32_t  internal_max_size;
   int32_t  leaf_max_size;
-  int32_t  attr_length;
+  int32_t  column_num; // used for multi index
+  // int32_t  attr_length;
+  int32_t  attr_length[MAX_COLUMN_NUM];
   int32_t  key_length; // attr length + sizeof(RID)
-  AttrType attr_type;
+  AttrType attr_type[MAX_COLUMN_NUM];
+  // AttrType attr_type;
 
   const std::string to_string()
   {
@@ -386,8 +423,8 @@ public:
    * 此函数创建一个名为fileName的索引。
    * attrType描述被索引属性的类型，attrLength描述被索引属性的长度
    */
-  RC create(const char *file_name, AttrType attr_type, int attr_length,
-	    int internal_max_size = -1, int leaf_max_size = -1);
+  RC create(const char *file_name, const std::vector<AttrType> &attr_type, 
+    const std::vector<int> &attr_length, int internal_max_size = -1, int leaf_max_size = -1);
 
   /**
    * 打开名为fileName的索引文件。
@@ -407,14 +444,14 @@ public:
    * 即向索引中插入一个值为（user_key，rid）的键值对
    * @note 这里假设user_key的内存大小与attr_length 一致
    */
-  RC insert_entry(const char *user_key, const RID *rid);
+  RC insert_entry(std::vector<const char *> &user_key, const RID *rid);
 
   /**
    * 从IndexHandle句柄对应的索引中删除一个值为（*pData，rid）的索引项
    * @return RECORD_INVALID_KEY 指定值不存在
    * @note 这里假设user_key的内存大小与attr_length 一致
    */
-  RC delete_entry(const char *user_key, const RID *rid);
+  RC delete_entry(std::vector<const char *> &user_key, const RID *rid);
 
   bool is_empty() const;
 
@@ -423,7 +460,7 @@ public:
    * @param key_len user_key的长度
    * @param rid  返回值，记录记录所在的页面号和slot
    */
-  RC get_entry(const char *user_key, int key_len, std::list<RID> &rids);
+  RC get_entry(const std::vector<const char *> &user_key, const std::vector<int> &key_len, std::list<RID> &rids);
 
   RC sync();
 
@@ -478,7 +515,9 @@ protected:
 
 private:
   char *make_key(const char *user_key, const RID &rid);
+  char *make_key(const std::vector<const char *> &user_key, const RID &rid);
   void  free_key(char *key);
+  void  free_key(std::vector<char *> &key);
 protected:
   DiskBufferPool *disk_buffer_pool_ = nullptr;
   bool header_dirty_ = false;
@@ -508,14 +547,15 @@ public:
    * @param right_len right_user_key 的内存大小(只有在变长字段中才会关注)
    * @param right_inclusive 右边界的值是否包含在内
    */
-  RC open(const char *left_user_key, int left_len, bool left_inclusive,
-	  const char *right_user_key, int right_len, bool right_inclusive);
+  RC open(const std::vector<const char *> &left_user_key, const std::vector<int> &left_len, 
+      bool left_inclusive, const std::vector<const char *> &right_user_key, const std::vector<int> &right_len, 
+      bool right_inclusive);
 
+  // RC open(const char *left_user_key, int left_len, bool left_inclusive,
+	//   const char *right_user_key, int right_len, bool right_inclusive);
   RC next_entry(RID *rid);
 
   RC close();
-
-  RC drop();
 
 private:
   /**

@@ -223,6 +223,18 @@ enum RC {
   NOTADB,           /* File opened that is not a database file */
   FILE_ERROR,       /* File error */
   LOGBUF,           /* clog buffer error */
+
+  //*******************************upselect******************************
+  SUB_ROW_ERROR,    
+  SUB_COL_ERROR,    
+  SUB_SAME_TABLE,   
+  SUB_BAD_TYPE,
+  //*******************************upselect******************************
+
+  //*******************************func***********************************
+  MISS_TYPE,
+  //*******************************func***********************************
+
   NOTICE = 100,     /* Notifications from log() */
 
   /* buffer pool part */
@@ -379,6 +391,10 @@ enum RC {
   /* clog buffer part */
   LOGBUF_FULL = (LOGBUF | (RCLOGBUF::LB_FULL << 8)),
   LOGBUF_EMPTY = (LOGBUF | (RCLOGBUF::LB_EMPTY << 8)),
+  
+  INVALID_DATE_IN_PARSE,
+
+  NULL_OP_ON_NON_NULLABLE, // Invalid opreration on non nullable field
 };
 
 extern const char *strrc(RC rc);

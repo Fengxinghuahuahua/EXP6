@@ -215,6 +215,9 @@ public:
   DiskBufferPool(BufferPoolManager &bp_manager, BPFrameManager &frame_manager);
   ~DiskBufferPool();
 
+  void set_file_desc(int fd) {
+    file_desc_ = fd;
+  }
   /**
    * 创建一个名称为指定文件名的分页文件
    */
@@ -284,7 +287,6 @@ public:
    */
   RC flush_all_pages();
 
-  std::string file_name() const { return file_name_; }
   /**
    * 回放日志时处理page0中已被认定为不存在的page
    */
@@ -324,7 +326,6 @@ public:
   ~BufferPoolManager();
 
   RC create_file(const char *file_name);
-  RC remove_file(const char *file_name);
   RC open_file(const char *file_name, DiskBufferPool *&bp);
   RC close_file(const char *file_name);
 

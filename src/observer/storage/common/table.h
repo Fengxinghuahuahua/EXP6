@@ -47,7 +47,7 @@ public:
    */
   RC create(const char *path, const char *name, const char *base_dir, int attribute_count, const AttrInfo attributes[],
       CLogManager *clog_manager);
-  RC destroy(const char *dir);
+
   /**
    * 打开一个表
    * @param meta_file 保存表元数据的文件完整路径
@@ -55,10 +55,12 @@ public:
    * @param clog_manager clog管理器
    */
   RC open(const char *meta_file, const char *base_dir, CLogManager *clog_manager);
+  RC destroy(const char *dir);
 
   RC insert_record(Trx *trx, int value_num, const Value *values);
   RC update_record(Trx *trx, const char *attribute_name, const Value *value, int condition_num,
       const Condition conditions[], int *updated_count);
+  RC update_record(Trx *trx, Record *record);
   RC delete_record(Trx *trx, ConditionFilter *filter, int *deleted_count);
   RC delete_record(Trx *trx, Record *record);
   RC recover_delete_record(Record *record);
@@ -66,7 +68,7 @@ public:
   RC scan_record(Trx *trx, ConditionFilter *filter, int limit, void *context,
       void (*record_reader)(const char *data, void *context));
 
-  RC create_index(Trx *trx, const char *index_name, const char *attribute_name);
+  RC create_index(Trx *trx, const char *index_name, const std::vector<const char *> &attribute_names, bool is_unique);
 
   RC get_record_scanner(RecordFileScanner &scanner);
 
@@ -99,10 +101,13 @@ private:
 
 public:
   RC recover_insert_record(Record *record);
+  RC recover_update_record(Record *record);
 
 private:
+public:
   friend class RecordUpdater;
   friend class RecordDeleter;
+  friend class RecordUpdater;
 
   RC insert_entry_of_indexes(const char *record, const RID &rid);
   RC delete_entry_of_indexes(const char *record, const RID &rid, bool error_on_not_exists);
@@ -114,6 +119,7 @@ private:
 public:
   Index *find_index(const char *index_name) const;
   Index *find_index_by_field(const char *field_name) const;
+  std::vector<Index *> all_indexes() const;
 
 private:
   std::string base_dir_;

@@ -98,16 +98,43 @@ RC Trx::delete_record(Table *table, Record *record)
   RC rc = RC::SUCCESS;
   start_if_not_started();
   Operation *old_oper = find_operation(table, record->rid());
+  /**
+    zpx:
+    the op hash table's key's equality is defined by rid, 
+    and due to the uniqueness of the key, one rid can only have one 
+    op type in the hash table(which can be covered)  
+  */
   if (old_oper != nullptr) {
-    if (old_oper->type() == Operation::Type::INSERT) {
+    if (old_oper->type() == Operation::Type::INSERT ||
+        old_oper->type() == Operation::Type::UPDATE) {
       delete_operation(table, record->rid());
       return RC::SUCCESS;
     } else {
+      // Type::DELETE:
+      // the record can't be deleted twice
       return RC::GENERIC_ERROR;
     }
   }
   set_record_trx_id(table, *record, trx_id_, true);
   insert_operation(table, Operation::Type::DELETE, record->rid());
+  return rc;
+}
+
+RC Trx::update_record(Table *table, Record *record)
+{
+  RC rc = RC::SUCCESS;
+  // check whether this rid has any operations before 
+  Operation *old_oper = find_operation(table, record->rid());
+  if (old_oper != nullptr) {
+    if (old_oper->type() == Operation::Type::DELETE) {
+      // the record has been deleted
+      return RC::GENERIC_ERROR;
+    } else {
+      // insert or update, just cover it
+      // TODO
+    }
+  }
+  insert_operation(table, Operation::Type::UPDATE, record->rid());
   return rc;
 }
 
@@ -166,41 +193,46 @@ void Trx::delete_operation(Table *table, const RID &rid)
 RC Trx::commit()
 {
   RC rc = RC::SUCCESS;
-  for (const auto &table_operations : operations_) {
-    Table *table = table_operations.first;
-    const OperationSet &operation_set = table_operations.second;
-    for (const Operation &operation : operation_set) {
 
-      RID rid;
-      rid.page_num = operation.page_num();
-      rid.slot_num = operation.slot_num();
+  /*
+    TODO: uncomment the followings and don't make the drop table crash(if the txn has insert or delete op)
+  */
 
-      switch (operation.type()) {
-        case Operation::Type::INSERT: {
-          rc = table->commit_insert(this, rid);
-          if (rc != RC::SUCCESS) {
-            // handle rc
-            LOG_ERROR(
-                "Failed to commit insert operation. rid=%d.%d, rc=%d:%s", rid.page_num, rid.slot_num, rc, strrc(rc));
-          }
-        } break;
-        case Operation::Type::DELETE: {
-          rc = table->commit_delete(this, rid);
-          if (rc != RC::SUCCESS) {
-            // handle rc
-            LOG_ERROR(
-                "Failed to commit delete operation. rid=%d.%d, rc=%d:%s", rid.page_num, rid.slot_num, rc, strrc(rc));
-          }
-        } break;
-        default: {
-          LOG_PANIC("Unknown operation. type=%d", (int)operation.type());
-        } break;
-      }
-    }
-  }
+  // for (const auto &table_operations : operations_) {
+  //   Table *table = table_operations.first;
+  //   const OperationSet &operation_set = table_operations.second;
+  //   for (const Operation &operation : operation_set) {
 
-  operations_.clear();
-  trx_id_ = 0;
+  //     RID rid;
+  //     rid.page_num = operation.page_num();
+  //     rid.slot_num = operation.slot_num();
+
+  //     switch (operation.type()) {
+  //       case Operation::Type::INSERT: {
+  //         rc = table->commit_insert(this, rid);
+  //         if (rc != RC::SUCCESS) {
+  //           // handle rc
+  //           LOG_ERROR(
+  //               "Failed to commit insert operation. rid=%d.%d, rc=%d:%s", rid.page_num, rid.slot_num, rc, strrc(rc));
+  //         }
+  //       } break;
+  //       case Operation::Type::DELETE: {
+  //         rc = table->commit_delete(this, rid);
+  //         if (rc != RC::SUCCESS) {
+  //           // handle rc
+  //           LOG_ERROR(
+  //               "Failed to commit delete operation. rid=%d.%d, rc=%d:%s", rid.page_num, rid.slot_num, rc, strrc(rc));
+  //         }
+  //       } break;
+  //       default: {
+  //         LOG_PANIC("Unknown operation. type=%d", (int)operation.type());
+  //       } break;
+  //     }
+  //   }
+  // }
+
+  // operations_.clear();
+  // trx_id_ = 0;
   return rc;
 }
 

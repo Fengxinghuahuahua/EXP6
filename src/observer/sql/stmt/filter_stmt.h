@@ -49,6 +49,16 @@ public:
     return comp_;
   }
 
+  void set_type(FilterType filter_type) {
+    filter_type_ = filter_type;
+  }
+
+  FilterType get_type() const {
+    return filter_type_;
+  }
+  bool get_and() const {
+    return is_and_;
+  }
   void set_left(Expression *expr)
   {
     left_ = expr;
@@ -56,6 +66,10 @@ public:
   void set_right(Expression *expr)
   {
     right_ = expr;
+  }
+  void set_and(bool is_and)
+  {
+    is_and_ = is_and;
   }
   Expression *left() const
   {
@@ -67,9 +81,13 @@ public:
   }
 
 private:
+  // bool is_comp_ = true;
+  // bool is_in_ = false;
   CompOp comp_ = NO_OP;
   Expression *left_ = nullptr;
   Expression *right_ = nullptr;
+  FilterType filter_type_;
+  bool is_and_;
 };
 
 class FilterStmt 
@@ -93,6 +111,13 @@ public:
   static RC create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
 			       const Condition &condition, FilterUnit *&filter_unit);
 
-private:
+// private:
   std::vector<FilterUnit *>  filter_units_; // 默认当前都是AND关系
+//*************************************************func***************************************************************
+  std::vector<Value>  left_arg_; 
+  std::vector<FunctionOp>  left_op; 
+  std::vector<Value>  right_arg_; 
+  std::vector<FunctionOp>  right_op; 
+  int hasfunc_;
+//*************************************************func***************************************************************
 };

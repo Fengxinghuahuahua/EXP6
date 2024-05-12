@@ -17,3 +17,19 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 
 std::string double2string(double v);
+
+// ***************************typecast*****************************************
+bool string2float(std::string str, float* num);
+// ***************************typecast*****************************************
+
+
+// ********************************like*****************************************
+bool is_like(std::string s1, std::string s2);
+// ********************************like*****************************************
+
+// ********************************func*****************************************
+float round(float f, int num);
+float round1(float f);
+char* date_format(int date, char* format);
+// ********************************func*****************************************
+

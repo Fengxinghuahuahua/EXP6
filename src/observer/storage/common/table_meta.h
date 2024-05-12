@@ -15,6 +15,9 @@ See the Mulan PSL v2 for more details. */
 #ifndef __OBSERVER_STORAGE_COMMON_TABLE_META_H__
 #define __OBSERVER_STORAGE_COMMON_TABLE_META_H__
 
+#define NULLMAP_OFFSET 4
+#define NULLMAP_LENGTH 4
+
 #include <string>
 #include <vector>
 
@@ -45,9 +48,11 @@ public:
   const std::vector<FieldMeta> *field_metas() const { return &fields_; }
   int field_num() const; // sys field included
   int sys_field_num() const;
+  int get_field_place(const char *name) const;
 
   const IndexMeta *index(const char *name) const;
   const IndexMeta *find_index_by_field(const char *field) const;
+  const IndexMeta *find_index_by_field(const std::vector<const char *> &field) const;
   const IndexMeta *index(int i) const;
   int index_num() const;
 
@@ -60,6 +65,10 @@ public:
   void to_string(std::string &output) const override;
   void desc(std::ostream &os) const;
 
+  bool has_alias() const { return !alias_name_.empty(); }
+  void set_alias(const std::string alias_name) { alias_name_ = alias_name; }
+  const char *get_alias() const { return alias_name_.c_str(); }
+
 protected:
   static RC init_sys_fields();
 
@@ -67,6 +76,8 @@ protected:
   std::string name_;
   std::vector<FieldMeta> fields_;  // 包含sys_fields
   std::vector<IndexMeta> indexes_;
+
+  std::string alias_name_;
 
   int record_size_ = 0;
 

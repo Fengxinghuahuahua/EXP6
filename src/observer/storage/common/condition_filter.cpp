@@ -50,6 +50,7 @@ RC DefaultConditionFilter::init(const ConDesc &left, const ConDesc &right, AttrT
     LOG_ERROR("Invalid condition with unsupported compare operation: %d", comp_op);
     return RC::INVALID_ARGUMENT;
   }
+  printf("default condition filter\n");
 
   left_ = left;
   right_ = right;
@@ -130,13 +131,13 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   char *right_value = nullptr;
 
   if (left_.is_attr) {  // value
-    left_value = (char *)(rec.data + left_.attr_offset);
+    left_value = (char *)(rec.data() + left_.attr_offset);
   } else {
     left_value = (char *)left_.value;
   }
 
   if (right_.is_attr) {
-    right_value = (char *)(rec.data + right_.attr_offset);
+    right_value = (char *)(rec.data() + right_.attr_offset);
   } else {
     right_value = (char *)right_.value;
   }
@@ -147,7 +148,7 @@ bool DefaultConditionFilter::filter(const Record &rec) const
       // 按照C字符串风格来定
       cmp_result = strcmp(left_value, right_value);
     } break;
-    case INTS: {
+    case INTS: case DATES: {
       // 没有考虑大小端问题
       // 对int和float，要考虑字节对齐问题,有些平台下直接转换可能会跪
       int left = *(int *)left_value;
@@ -157,10 +158,8 @@ bool DefaultConditionFilter::filter(const Record &rec) const
     case FLOATS: {
       float left = *(float *)left_value;
       float right = *(float *)right_value;
-      cmp_result = (int)(left - right);
-    } break;
-    case DATES: {
-      //TODO 参考INTS进行大小段转换
+      float result = left - right;
+      cmp_result = result >= 0 ? ceil(result) : floor(result);
     } break;
     default: {
     }

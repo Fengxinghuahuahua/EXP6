@@ -30,7 +30,7 @@ public:
   FieldMeta();
   ~FieldMeta() = default;
 
-  RC init(const char *name, AttrType attr_type, int attr_offset, int attr_len, bool visible);
+  RC init(const char *name, AttrType attr_type, int attr_offset, int attr_len, bool visible, int is_nullable);
 
 public:
   const char *name() const;
@@ -38,6 +38,10 @@ public:
   int offset() const;
   int len() const;
   bool visible() const;
+  bool nullable() const;
+  bool has_alias() const { return !alias_name_.empty(); }
+  void set_alias(const std::string &alias) { alias_name_ = alias; }
+  const char *get_alias() const { return alias_name_.c_str(); }
 
 public:
   void desc(std::ostream &os) const;
@@ -52,5 +56,7 @@ protected:
   int attr_offset_;
   int attr_len_;
   bool visible_;
+  bool nullable_;
+  std::string alias_name_;
 };
 #endif  // __OBSERVER_STORAGE_COMMON_FIELD_META_H__

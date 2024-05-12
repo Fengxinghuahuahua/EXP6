@@ -39,6 +39,10 @@ public:
 
   int compare(const TupleCell &other) const;
 
+  // **********************************like*************************************************
+  bool fuzzy_query_compare(const TupleCell &other) const;
+  // **********************************like*************************************************
+
   const char *data() const
   {
     return data_;
@@ -51,7 +55,7 @@ public:
     return attr_type_;
   }
 
-private:
+public:
   AttrType attr_type_ = UNDEFINED;
   int length_ = -1;
   char *data_ = nullptr; // real data. no need to move to field_meta.offset

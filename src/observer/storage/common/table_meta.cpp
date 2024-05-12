@@ -40,15 +40,21 @@ void TableMeta::swap(TableMeta &other) noexcept
 
 RC TableMeta::init_sys_fields()
 {
-  sys_fields_.reserve(1);
-  FieldMeta field_meta;
-  RC rc = field_meta.init(Trx::trx_field_name(), Trx::trx_field_type(), 0, Trx::trx_field_len(), false);
+  sys_fields_.reserve(2);
+  FieldMeta trx_field_meta, nullmap_field_meta;
+  RC rc = trx_field_meta.init(Trx::trx_field_name(), Trx::trx_field_type(), 0, Trx::trx_field_len(), false, 0);
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to init trx field. rc = %d:%s", rc, strrc(rc));
+    return rc;
+  }
+  rc = nullmap_field_meta.init("nullmap", AttrType::INTS, NULLMAP_OFFSET, NULLMAP_LENGTH, true, 0);
   if (rc != RC::SUCCESS) {
     LOG_ERROR("Failed to init trx field. rc = %d:%s", rc, strrc(rc));
     return rc;
   }
 
-  sys_fields_.push_back(field_meta);
+  sys_fields_.emplace_back(trx_field_meta);
+  sys_fields_.emplace_back(nullmap_field_meta);
   return rc;
 }
 RC TableMeta::init(const char *name, int field_num, const AttrInfo attributes[])
@@ -71,7 +77,8 @@ RC TableMeta::init(const char *name, int field_num, const AttrInfo attributes[])
       return rc;
     }
   }
-
+  
+  // null值表作为第二个sys_field
   fields_.resize(field_num + sys_fields_.size());
   for (size_t i = 0; i < sys_fields_.size(); i++) {
     fields_[i] = sys_fields_[i];
@@ -82,7 +89,7 @@ RC TableMeta::init(const char *name, int field_num, const AttrInfo attributes[])
 
   for (int i = 0; i < field_num; i++) {
     const AttrInfo &attr_info = attributes[i];
-    rc = fields_[i + sys_fields_.size()].init(attr_info.name, attr_info.type, field_offset, attr_info.length, true);
+    rc = fields_[i + sys_fields_.size()].init(attr_info.name, attr_info.type, field_offset, attr_info.length, true, attr_info.is_nullable);
     if (rc != RC::SUCCESS) {
       LOG_ERROR("Failed to init field meta. table name=%s, field name: %s", name, attr_info.name);
       return rc;
@@ -114,7 +121,7 @@ const FieldMeta *TableMeta::trx_field() const
   return &fields_[0];
 }
 
-const FieldMeta *TableMeta::field(int index) const
+const FieldMeta *TableMeta::field(int index) const 
 {
   return &fields_[index];
 }
@@ -129,6 +136,19 @@ const FieldMeta *TableMeta::field(const char *name) const
     }
   }
   return nullptr;
+}
+
+int TableMeta::get_field_place(const char *name) const {
+  if (nullptr == name) {
+    return -1;
+  }
+  auto size = fields_.size();
+  for (int i = 0; i < size; ++i) {
+    if (0 == strcmp(fields_[i].name(), name)) {
+      return i - sys_fields_.size();
+    }
+  }
+  return -1;
 }
 
 const FieldMeta *TableMeta::find_field_by_offset(int offset) const
@@ -162,8 +182,23 @@ const IndexMeta *TableMeta::index(const char *name) const
 
 const IndexMeta *TableMeta::find_index_by_field(const char *field) const
 {
+  return find_index_by_field(std::vector<const char*>{field});
+}
+
+const IndexMeta *TableMeta::find_index_by_field(const std::vector<const char *> &field) const
+{
   for (const IndexMeta &index : indexes_) {
-    if (0 == strcmp(index.field(), field)) {
+    if (index.field().size() != field.size()) {
+      continue;
+    }
+    bool exists = true;
+    for (int i = 0; i < field.size(); ++i) {
+      if (0 != strcmp(index.field()[i], field[i])) {
+        exists = false;
+        break;
+      }
+    }
+    if (exists) {
       return &index;
     }
   }

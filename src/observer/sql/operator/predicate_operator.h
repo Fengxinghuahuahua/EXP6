@@ -14,7 +14,10 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include "sql/expr/tuple.h"
 #include "sql/operator/operator.h"
+#include <string>
+#include <unordered_map>
 
 class FilterStmt;
 
@@ -31,15 +34,31 @@ public:
 
   virtual ~PredicateOperator() = default;
 
+  RC set_parent_tuple(Tuple *parent_tuple) {
+    parent_tuple_ = parent_tuple;
+    return RC::SUCCESS;
+  }
+
   RC open() override;
   RC next() override;
   RC close() override;
+
+  RC next_when_multi_tables();
 
   Tuple * current_tuple() override;
   //int tuple_cell_num() const override;
   //RC tuple_cell_spec_at(int index, TupleCellSpec &spec) const override;
 private:
-  bool do_predicate(RowTuple &tuple);
+  RC do_predicate(CompositeTuple &tuple, bool &res);
 private:
   FilterStmt *filter_stmt_ = nullptr;
+  std::vector<Tuple *> tuple_stack_;
+  int stk_top_ = 0;
+  CompositeTuple *current_tuple_ = nullptr;
+  // simple sub query
+  Tuple *parent_tuple_ = nullptr;
+  bool is_over_ = false;
+  bool has_accelerated_ = false;
+  // // table name -> index in the tuple stack(i.e. chilren -> index in the tuple stack)
+  // std::unordered_map<std::string, int> table_to_idx_;
 };

@@ -47,15 +47,50 @@ RC ProjectOperator::close()
 Tuple *ProjectOperator::current_tuple()
 {
   tuple_.set_tuple(children_[0]->current_tuple());
+  // printf("tuple addr %p\n", &tuple_);
   return &tuple_;
 }
 
-void ProjectOperator::add_projection(const Table *table, const FieldMeta *field_meta)
+void ProjectOperator::add_projection(const Table *table, const FieldMeta *field_meta, bool is_single_table)
 {
   // 对单表来说，展示的(alias) 字段总是字段名称，
   // 对多表查询来说，展示的alias 需要带表名字
   TupleCellSpec *spec = new TupleCellSpec(new FieldExpr(table, field_meta));
-  spec->set_alias(field_meta->name());
+  if (field_meta->has_alias()) {
+    // the field has alias, then just print the alias no matter wether this is multi tables or not
+    printf("column alias %s\n", field_meta->get_alias());
+    spec->set_alias(strdup(field_meta->get_alias()));
+    // then remove the alias
+    const_cast<FieldMeta *>(field_meta)->set_alias("");
+  } else {
+    if (is_single_table) {
+      if (field_meta->has_alias()) {
+        spec->set_alias(field_meta->get_alias());
+      } else {
+        spec->set_alias(field_meta->name());
+      }
+    } else {
+      // TODO memory leak
+      std::string *res = new std::string;
+      std::string table_name;
+      if (table->table_meta().has_alias()) {
+        table_name = table->table_meta().get_alias();
+        printf("table has alias : %s\n", table_name.c_str());
+      } else {
+        table_name = table->name();
+      }
+      std::string field_name;
+      if (field_meta->has_alias()) {
+        field_name = field_meta->get_alias();
+      } else {
+        field_name = field_meta->name();
+      }
+      *res += table_name + "." + field_name;
+      printf("column alias %s\n", res->c_str());
+      spec->set_alias(res->c_str());
+    }
+  }
+
   tuple_.add_cell_spec(spec);
 }
 
